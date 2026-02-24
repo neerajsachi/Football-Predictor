@@ -49,6 +49,27 @@ AI-powered web application that predicts football match outcomes and transfer mo
 - **1,000+** clubs from top European leagues
 - Features: goals, xGoals, shots, win rates, team form
 
+**Note:** Large CSV files (>100MB) are not included in the repository due to GitHub size limits.
+
+### Dataset Files Included:
+- ✅ `clubs.csv` - Club information
+- ✅ `club_games.csv` - Match statistics
+- ✅ `games.csv` - Match results
+- ✅ `players.csv` - Player information
+- ✅ `transfers.csv` - Transfer history
+- ✅ `competitions.csv` - Competition data
+- ✅ `player_valuations.csv` - Market values
+
+### Large Files (Download Required):
+- ❌ `appearances.csv` (129 MB)
+- ❌ `game_events.csv` (129 MB)
+- ❌ `game_lineups.csv` (283 MB)
+
+**To get the full dataset:**
+1. Download from [Transfermarkt Dataset](https://www.kaggle.com/datasets/davidcariboo/player-scores) or contact the repository owner
+2. Place files in `backend/data/dataset/`
+3. The application will work with the included files, but some features may be limited
+
 ## 🚀 Quick Start
 
 ### Prerequisites

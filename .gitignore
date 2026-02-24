@@ -36,6 +36,7 @@ Thumbs.db
 *.pkl
 backend/models/*.pkl
 
-# Data - Keep structure, ignore large CSV files if needed
-# Uncomment if CSV files are too large (>100MB)
-# backend/data/dataset/*.csv
+# Large CSV files (>100MB)
+backend/data/dataset/appearances.csv
+backend/data/dataset/game_events.csv
+backend/data/dataset/game_lineups.csv
