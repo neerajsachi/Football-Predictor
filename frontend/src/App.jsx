@@ -93,7 +93,15 @@ function App() {
   ).slice(0, 10)
 
   return (
-    <div className="min-h-screen py-8 px-4 sm:py-12">
+    <div 
+      className="min-h-screen py-8 px-4 sm:py-12"
+      style={{
+        backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.7), rgba(0, 0, 0, 0.7)), url('/DvPkMESS.jpg')`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundAttachment: 'fixed'
+      }}
+    >
       <div className="max-w-7xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12 animate-fadeIn">
