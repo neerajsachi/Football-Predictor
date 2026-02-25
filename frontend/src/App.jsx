@@ -274,10 +274,13 @@ function App() {
                 <div className="bg-gradient-to-r from-green-500 to-blue-500 text-white rounded-2xl p-8 text-center">
                   <h2 className="text-3xl font-bold mb-4">Match Prediction</h2>
                   <div className="text-6xl font-bold mb-4">{prediction.score}</div>
-                  <div className="text-2xl mb-2">
-                    <span className="font-semibold">Winner: </span>
-                    <span className="bg-white/20 px-4 py-2 rounded-lg">{getWinnerDisplay(prediction.winner)}</span>
-                  </div>
+                  {prediction.importance && (
+                    <div className="mt-4">
+                      <span className="px-4 py-2 rounded-lg font-semibold bg-purple-600">
+                        {prediction.importance}
+                      </span>
+                    </div>
+                  )}
                 </div>
 
                 <div className="grid md:grid-cols-3 gap-4">
@@ -297,15 +300,34 @@ function App() {
 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div className="bg-gradient-to-br from-blue-50 to-blue-100 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">⚽ {displayHomeTeam} Stats</h3>
+                    <h3 className="text-xl font-bold text-gray-800 mb-2">
+                      ⚽ {displayHomeTeam}
+                      {prediction.stats.home_league_position && (
+                        <span className="ml-2 text-sm bg-blue-600 text-white px-2 py-1 rounded">#{prediction.stats.home_league_position}</span>
+                      )}
+                    </h3>
+                    {prediction.stats.home_manager && (
+                      <p className="text-sm text-gray-600 mb-2">👔 Manager: {prediction.stats.home_manager}</p>
+                    )}
+                    {prediction.stats.home_stadium && prediction.stats.home_stadium !== 'Unknown' && (
+                      <p className="text-sm text-gray-600 mb-4">🏟️ Stadium: {prediction.stats.home_stadium}</p>
+                    )}
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-gray-700">Predicted Goals:</span>
                         <span className="font-bold text-blue-600">{prediction.stats.home_goals}</span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-700">xG (Expected):</span>
+                        <span className="font-bold text-blue-500">{prediction.stats.home_xg}</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-700">Avg Goals/Game:</span>
                         <span className="font-bold">{prediction.stats.home_avg_goals}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Avg Conceded:</span>
+                        <span className="font-bold text-red-500">{prediction.stats.home_conceded_avg}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-700">Avg Shots:</span>
@@ -323,6 +345,18 @@ function App() {
                         <span className="text-gray-700">Win Rate:</span>
                         <span className="font-bold text-green-600">{prediction.stats.home_win_rate}%</span>
                       </div>
+                      {prediction.stats.home_form && prediction.stats.home_form.length > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Form:</span>
+                          <span className="text-2xl">
+                            {prediction.stats.home_form.map((result, i) => (
+                              <span key={i}>
+                                {result === 'W' ? '🟢' : result === 'L' ? '🔴' : '🟡'}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-4">
                       <p className="text-sm font-semibold text-gray-700 mb-2">Likely Scorers:</p>
@@ -337,15 +371,34 @@ function App() {
                   </div>
 
                   <div className="bg-gradient-to-br from-red-50 to-red-100 rounded-xl p-6">
-                    <h3 className="text-xl font-bold text-gray-800 mb-4">⚽ {displayAwayTeam} Stats</h3>
+                    <h3 className="text-xl font-bold text-gray-800 mb-2">
+                      ⚽ {displayAwayTeam}
+                      {prediction.stats.away_league_position && (
+                        <span className="ml-2 text-sm bg-red-600 text-white px-2 py-1 rounded">#{prediction.stats.away_league_position}</span>
+                      )}
+                    </h3>
+                    {prediction.stats.away_manager && (
+                      <p className="text-sm text-gray-600 mb-2">👔 Manager: {prediction.stats.away_manager}</p>
+                    )}
+                    {prediction.stats.away_stadium && prediction.stats.away_stadium !== 'Unknown' && (
+                      <p className="text-sm text-gray-600 mb-4">🏟️ Stadium: {prediction.stats.away_stadium}</p>
+                    )}
                     <div className="space-y-2">
                       <div className="flex justify-between">
                         <span className="text-gray-700">Predicted Goals:</span>
                         <span className="font-bold text-red-600">{prediction.stats.away_goals}</span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-gray-700">xG (Expected):</span>
+                        <span className="font-bold text-red-500">{prediction.stats.away_xg}</span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-gray-700">Avg Goals/Game:</span>
                         <span className="font-bold">{prediction.stats.away_avg_goals}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-gray-700">Avg Conceded:</span>
+                        <span className="font-bold text-red-500">{prediction.stats.away_conceded_avg}</span>
                       </div>
                       <div className="flex justify-between">
                         <span className="text-gray-700">Avg Shots:</span>
@@ -363,6 +416,18 @@ function App() {
                         <span className="text-gray-700">Win Rate:</span>
                         <span className="font-bold text-green-600">{prediction.stats.away_win_rate}%</span>
                       </div>
+                      {prediction.stats.away_form && prediction.stats.away_form.length > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-gray-700">Form:</span>
+                          <span className="text-2xl">
+                            {prediction.stats.away_form.map((result, i) => (
+                              <span key={i}>
+                                {result === 'W' ? '🟢' : result === 'L' ? '🔴' : '🟡'}
+                              </span>
+                            ))}
+                          </span>
+                        </div>
+                      )}
                     </div>
                     <div className="mt-4">
                       <p className="text-sm font-semibold text-gray-700 mb-2">Likely Scorers:</p>
@@ -376,6 +441,26 @@ function App() {
                     </div>
                   </div>
                 </div>
+
+                {/* Head-to-Head Results */}
+                {prediction.stats.h2h_results && prediction.stats.h2h_results.length > 0 && (
+                  <div className="bg-gradient-to-br from-purple-50 to-purple-100 rounded-xl p-6">
+                    <h3 className="text-xl font-bold text-gray-800 mb-4">🏆 Last 3 Head-to-Head</h3>
+                    <div className="space-y-3">
+                      {prediction.stats.h2h_results.map((match, idx) => (
+                        <div key={idx} className="bg-white rounded-lg p-3 flex items-center justify-between">
+                          <span className="text-gray-700 font-medium">{match.result}</span>
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs text-gray-500">{match.date}</span>
+                            {match.winner === 'home' && <span className="text-blue-600 font-bold">W</span>}
+                            {match.winner === 'away' && <span className="text-red-600 font-bold">L</span>}
+                            {match.winner === 'draw' && <span className="text-gray-600 font-bold">D</span>}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

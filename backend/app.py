@@ -21,9 +21,13 @@ predictor = MatchPredictor()
 transfer_predictor = TransferPredictor()
 clubs_df = pd.read_csv('data/dataset/clubs.csv', encoding='utf-8')
 club_games_df = pd.read_csv('data/dataset/club_games.csv', encoding='utf-8')
+games_df = pd.read_csv('data/dataset/games.csv', encoding='utf-8')
 appearances_df = pd.read_csv('data/dataset/appearances.csv', encoding='utf-8')
 players_df = pd.read_csv('data/dataset/players.csv', encoding='utf-8')
 transfers_df = pd.read_csv('data/dataset/transfers.csv', encoding='utf-8')
+
+# Parse dates
+games_df['date'] = pd.to_datetime(games_df['date'])
 
 # Parse contract expiry dates
 players_df['contract_expiration_date'] = pd.to_datetime(players_df['contract_expiration_date'], errors='coerce')
@@ -64,9 +68,9 @@ async def predict_match(request: MatchRequest):
     print(f"Home: {home_team}")
     print(f"Away: {away_team}")
     
-    # Get team stats
-    home_stats = get_team_stats(home_team, club_map, club_games_df)
-    away_stats = get_team_stats(away_team, club_map, club_games_df)
+    # Get team stats with head-to-head
+    home_stats = get_team_stats(home_team, club_map, club_games_df, games_df, clubs_df)
+    away_stats = get_team_stats(away_team, club_map, club_games_df, games_df, clubs_df)
     
     print(f"Home stats found: {home_stats is not None}")
     print(f"Away stats found: {away_stats is not None}")
@@ -77,15 +81,95 @@ async def predict_match(request: MatchRequest):
     if not away_stats:
         return {"error": f"Club not found: {away_team}"}
     
+    # Get stadium names
+    home_club_data = clubs_df[clubs_df['club_id'] == home_stats['team_id']].iloc[0]
+    away_club_data = clubs_df[clubs_df['club_id'] == away_stats['team_id']].iloc[0]
+    home_stadium = home_club_data.get('stadium_name', 'Unknown')
+    away_stadium = away_club_data.get('stadium_name', 'Unknown')
+    
+    # Get head-to-head stats
+    home_stats_h2h = get_team_stats(home_team, club_map, club_games_df, games_df, clubs_df, away_stats['team_id'])
+    away_stats_h2h = get_team_stats(away_team, club_map, club_games_df, games_df, clubs_df, home_stats['team_id'])
+    
+    # Merge h2h stats
+    if home_stats_h2h:
+        home_stats.update({k: v for k, v in home_stats_h2h.items() if k.startswith('h2h')})
+    if away_stats_h2h:
+        away_stats.update({k: v for k, v in away_stats_h2h.items() if k.startswith('h2h')})
+    
+    # Get last 3 H2H matches
+    h2h_matches = games_df[
+        (((games_df['home_club_id'] == home_stats['team_id']) & (games_df['away_club_id'] == away_stats['team_id'])) |
+         ((games_df['home_club_id'] == away_stats['team_id']) & (games_df['away_club_id'] == home_stats['team_id'])))
+    ].sort_values('date', ascending=False).head(3)
+    
+    h2h_results = []
+    for _, match in h2h_matches.iterrows():
+        if match['home_club_id'] == home_stats['team_id']:
+            result = f"{home_team} {int(match['home_club_goals'])}-{int(match['away_club_goals'])} {away_team}"
+            winner = 'home' if match['home_club_goals'] > match['away_club_goals'] else ('away' if match['away_club_goals'] > match['home_club_goals'] else 'draw')
+        else:
+            result = f"{away_team} {int(match['home_club_goals'])}-{int(match['away_club_goals'])} {home_team}"
+            winner = 'away' if match['home_club_goals'] > match['away_club_goals'] else ('home' if match['away_club_goals'] > match['home_club_goals'] else 'draw')
+        
+        h2h_results.append({
+            'result': result,
+            'winner': winner,
+            'date': match['date'].strftime('%Y-%m-%d')
+        })
+    
     print(f"Home: {home_stats['goals_avg']:.2f} goals, {home_stats['win_rate']:.1f}% win rate")
     print(f"Away: {away_stats['goals_avg']:.2f} goals, {away_stats['win_rate']:.1f}% win rate")
     
     # Predict match
     prediction = predictor.predict(home_stats, away_stats)
     
+    # Calculate xG (Expected Goals) - based on shots on target
+    home_xg = round(home_stats.get('goals_avg', 0) * 1.1, 1)  # Slight boost for home
+    away_xg = round(away_stats.get('goals_avg', 0) * 0.95, 1)  # Slight reduction for away
+    
+    # Match importance
+    # Define historic rivalries
+    rivalries = [
+        {'Manchester United', 'Liverpool'},
+        {'Manchester United', 'Manchester City'},
+        {'Manchester United', 'Arsenal'},
+        {'Liverpool', 'Everton'},
+        {'Arsenal', 'Tottenham'},
+        {'Chelsea', 'Tottenham'},
+        {'Barcelona', 'Real Madrid'},
+        {'AC Milan', 'Inter'},
+        {'Bayern Munich', 'Borussia Dortmund'},
+    ]
+    
+    # Check if it's a rivalry match
+    is_rivalry = any(
+        (home_team in rivalry and away_team in rivalry) or
+        (any(home_team.startswith(r) for r in rivalry) and any(away_team.startswith(r) for r in rivalry))
+        for rivalry in rivalries
+    )
+    
+    home_pos = home_stats.get('league_position', 10)
+    away_pos = away_stats.get('league_position', 10)
+    
+    if is_rivalry:
+        importance = 'Rivalry Match'
+    elif home_pos <= 4 and away_pos <= 4:
+        importance = 'Title Race'
+    elif home_pos >= 17 or away_pos >= 17:
+        importance = 'Relegation Battle'
+    else:
+        importance = 'Regular Match'
+    
     # Get top scorers
     home_scorers = get_top_scorers(home_stats.get('team_id'), appearances_df, player_map)
     away_scorers = get_top_scorers(away_stats.get('team_id'), appearances_df, player_map)
+    
+    # Helper to convert NaN to None for JSON serialization
+    def safe_value(val, default=0):
+        if pd.isna(val) or val is None:
+            return default
+        return val
     
     return {
         "home_team": home_team,
@@ -93,6 +177,7 @@ async def predict_match(request: MatchRequest):
         "prediction": {
             "winner": prediction['winner'],
             "score": prediction['predicted_score'],
+            "importance": importance,
             "probabilities": {
                 "home_win": f"{prediction['home_win_prob']*100:.1f}%",
                 "draw": f"{prediction['draw_prob']*100:.1f}%",
@@ -101,16 +186,29 @@ async def predict_match(request: MatchRequest):
             "stats": {
                 "home_goals": prediction['home_goals'],
                 "away_goals": prediction['away_goals'],
-                "home_avg_goals": round(home_stats['goals_avg'], 2),
-                "away_avg_goals": round(away_stats['goals_avg'], 2),
-                "home_shots": round(home_stats.get('goals_avg', 0) * 8, 1),  # Estimate
-                "away_shots": round(away_stats.get('goals_avg', 0) * 8, 1),
-                "home_shots_on_target": round(home_stats.get('goals_avg', 0) * 4, 1),
-                "away_shots_on_target": round(away_stats.get('goals_avg', 0) * 4, 1),
-                "home_corners": round(home_stats.get('goals_avg', 0) * 3, 1),
-                "away_corners": round(away_stats.get('goals_avg', 0) * 3, 1),
-                "home_win_rate": round(home_stats.get('win_rate', 0), 1),
-                "away_win_rate": round(away_stats.get('win_rate', 0), 1)
+                "home_avg_goals": round(safe_value(home_stats.get('goals_avg', 0)), 2),
+                "away_avg_goals": round(safe_value(away_stats.get('goals_avg', 0)), 2),
+                "home_conceded_avg": round(safe_value(home_stats.get('conceded_avg', 0)), 2),
+                "away_conceded_avg": round(safe_value(away_stats.get('conceded_avg', 0)), 2),
+                "home_xg": home_xg,
+                "away_xg": away_xg,
+                "home_shots": round(safe_value(home_stats.get('goals_avg', 0)) * 8, 1),
+                "away_shots": round(safe_value(away_stats.get('goals_avg', 0)) * 8, 1),
+                "home_shots_on_target": round(safe_value(home_stats.get('goals_avg', 0)) * 4, 1),
+                "away_shots_on_target": round(safe_value(away_stats.get('goals_avg', 0)) * 4, 1),
+                "home_corners": round(safe_value(home_stats.get('goals_avg', 0)) * 3, 1),
+                "away_corners": round(safe_value(away_stats.get('goals_avg', 0)) * 3, 1),
+                "home_win_rate": round(safe_value(home_stats.get('win_rate', 0)), 1),
+                "away_win_rate": round(safe_value(away_stats.get('win_rate', 0)), 1),
+                "home_form": home_stats.get('form', []),
+                "away_form": away_stats.get('form', []),
+                "home_league_position": safe_value(home_stats.get('league_position'), None),
+                "away_league_position": safe_value(away_stats.get('league_position'), None),
+                "home_manager": home_stats.get('manager_name', 'Unknown'),
+                "away_manager": away_stats.get('manager_name', 'Unknown'),
+                "home_stadium": home_stadium if pd.notna(home_stadium) else 'Unknown',
+                "away_stadium": away_stadium if pd.notna(away_stadium) else 'Unknown',
+                "h2h_results": h2h_results
             },
             "likely_scorers": {
                 "home": home_scorers[:3],

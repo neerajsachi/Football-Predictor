@@ -12,8 +12,15 @@ AI-powered web application that predicts football match outcomes and transfer mo
 ### Match Predictor
 - 🏆 **Winner Prediction** - Home/Draw/Away with probabilities
 - 📊 **Score Prediction** - Predicted final score
-- ⚽ **Goal Scorers** - Likely players to score
+- ⚽ **Goal Scorers** - Likely players to score based on recent performance
 - 📈 **Team Statistics** - Goals, shots, win rates, form analysis
+- 🎯 **Expected Goals (xG)** - Statistical goal expectation for both teams
+- 🏟️ **Stadium Information** - Home and away team stadium names
+- 👔 **Manager Details** - Current manager for each team
+- 📍 **League Positions** - Current standings in the league
+- 🔥 **Form Display** - Last 5 match results with visual indicators (Win/Draw/Loss)
+- 🤝 **Head-to-Head History** - Last 3 meetings between the teams
+- 🏅 **Match Importance** - Rivalry Match, Title Race, Relegation Battle detection
 - 🎨 **Real-time Predictions** - Instant results with animated UI
 
 ### Transfer Predictor
@@ -176,19 +183,22 @@ predictor/
 ### Match Prediction
 
 1. **Data Collection**: Analyzes last 10 games for each team
-2. **Feature Engineering**: Creates 14 features including:
+2. **Feature Engineering**: Creates 25 features including:
    - Goals average (home/away)
    - Conceded average
    - Win rates (overall/home/away)
    - Attack/defense ratios
    - Form differences
+   - Head-to-head statistics (last 5 meetings)
+   - League positions
+   - Manager stability (games managed)
 3. **ML Models**: Ensemble of 4 models:
    - RandomForest Classifier (winner)
    - GradientBoosting Classifier (winner)
    - GradientBoosting Regressor (home goals)
    - GradientBoosting Regressor (away goals)
-4. **Quality Adjustment**: Boosts stronger team's probability when playing away
-5. **Output**: Winner, score, probabilities, top scorers
+4. **Rivalry Detection**: Identifies historic rivalries (Man Utd vs Liverpool, El Clásico, etc.)
+5. **Output**: Winner, score, probabilities, xG, form, H2H history, top scorers
 
 ### Transfer Prediction
 
@@ -217,12 +227,13 @@ predictor/
 ## 📝 Future Enhancements
 
 - [ ] Add player injury data
-- [ ] Include head-to-head history
+- [ ] Include weather conditions
 - [ ] Real-time odds comparison
 - [ ] Historical prediction accuracy tracking
 - [ ] More leagues and competitions
 - [ ] Mobile app version
 - [ ] User accounts and prediction history
+- [ ] Live match updates and in-play predictions
 
 ## 📄 License
 

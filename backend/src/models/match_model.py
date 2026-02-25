@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier, GradientBoostingRegressor
 from sklearn.preprocessing import StandardScaler
 import pickle
@@ -15,21 +16,41 @@ class MatchPredictor:
         self.is_trained = False
         
     def prepare_features(self, home_stats, away_stats):
+        # Helper to safely get values with defaults
+        def safe_get(stats, key, default):
+            val = stats.get(key, default)
+            return default if pd.isna(val) or val is None else val
+        
         features = [
-            home_stats['goals_avg'],
-            away_stats['goals_avg'],
-            home_stats.get('conceded_avg', 1.5),
-            away_stats.get('conceded_avg', 1.5),
-            home_stats['goals_avg'] - away_stats['goals_avg'],  # Attack difference
-            away_stats.get('conceded_avg', 1.5) - home_stats.get('conceded_avg', 1.5),  # Defense difference
-            home_stats.get('win_rate', 50) / 100,
-            away_stats.get('win_rate', 50) / 100,
-            (home_stats.get('win_rate', 50) - away_stats.get('win_rate', 50)) / 100,  # Form difference
-            home_stats.get('home_win_rate', 50) / 100,  # Home advantage
-            away_stats.get('away_win_rate', 50) / 100,  # Away form
-            home_stats['goals_avg'] / max(home_stats.get('conceded_avg', 1), 0.5),  # Home attack/defense ratio
-            away_stats['goals_avg'] / max(away_stats.get('conceded_avg', 1), 0.5),  # Away attack/defense ratio
-            0.3  # Reduced home advantage constant
+            safe_get(home_stats, 'goals_avg', 1.5),
+            safe_get(away_stats, 'goals_avg', 1.5),
+            safe_get(home_stats, 'conceded_avg', 1.5),
+            safe_get(away_stats, 'conceded_avg', 1.5),
+            safe_get(home_stats, 'goals_avg', 1.5) - safe_get(away_stats, 'goals_avg', 1.5),
+            safe_get(away_stats, 'conceded_avg', 1.5) - safe_get(home_stats, 'conceded_avg', 1.5),
+            safe_get(home_stats, 'win_rate', 50) / 100,
+            safe_get(away_stats, 'win_rate', 50) / 100,
+            (safe_get(home_stats, 'win_rate', 50) - safe_get(away_stats, 'win_rate', 50)) / 100,
+            safe_get(home_stats, 'home_win_rate', 50) / 100,
+            safe_get(away_stats, 'away_win_rate', 50) / 100,
+            safe_get(home_stats, 'goals_avg', 1.5) / max(safe_get(home_stats, 'conceded_avg', 1), 0.5),
+            safe_get(away_stats, 'goals_avg', 1.5) / max(safe_get(away_stats, 'conceded_avg', 1), 0.5),
+            0.3,
+            # Head-to-head features
+            safe_get(home_stats, 'h2h_win_rate', 50) / 100,
+            safe_get(home_stats, 'h2h_goals_avg', safe_get(home_stats, 'goals_avg', 1.5)),
+            safe_get(away_stats, 'h2h_goals_avg', safe_get(away_stats, 'goals_avg', 1.5)),
+            safe_get(home_stats, 'h2h_count', 0) / 10,
+            # League position features
+            (20 - safe_get(home_stats, 'league_position', 10)) / 20,
+            (20 - safe_get(away_stats, 'league_position', 10)) / 20,
+            # Squad value features
+            safe_get(home_stats, 'squad_value', 100000000) / 1e9,
+            safe_get(away_stats, 'squad_value', 100000000) / 1e9,
+            safe_get(home_stats, 'squad_value', 100000000) / max(safe_get(away_stats, 'squad_value', 100000000), 1),
+            # Manager stability
+            safe_get(home_stats, 'manager_games', 5) / 10,
+            safe_get(away_stats, 'manager_games', 5) / 10
         ]
         return np.array(features).reshape(1, -1)
     
@@ -41,13 +62,25 @@ class MatchPredictor:
                 'goals_avg': data['home_goals_avg'],
                 'conceded_avg': data.get('home_conceded_avg', 1.5),
                 'win_rate': data.get('home_win_rate', 50),
-                'home_win_rate': data.get('home_home_win_rate', 50)
+                'home_win_rate': data.get('home_home_win_rate', 50),
+                'h2h_win_rate': data.get('h2h_home_win_rate', 50),
+                'h2h_goals_avg': data.get('h2h_home_goals_avg', data['home_goals_avg']),
+                'h2h_count': data.get('h2h_count', 0),
+                'league_position': data.get('home_position', 10),
+                'squad_value': data.get('home_value', 0),
+                'manager_games': data.get('home_manager_games', 5)
             }
             away_stats = {
                 'goals_avg': data['away_goals_avg'],
                 'conceded_avg': data.get('away_conceded_avg', 1.5),
                 'win_rate': data.get('away_win_rate', 50),
-                'away_win_rate': data.get('away_away_win_rate', 50)
+                'away_win_rate': data.get('away_away_win_rate', 50),
+                'h2h_win_rate': 100 - data.get('h2h_home_win_rate', 50),  # Inverse of home
+                'h2h_goals_avg': data.get('h2h_away_goals_avg', data['away_goals_avg']),
+                'h2h_count': data.get('h2h_count', 0),
+                'league_position': data.get('away_position', 10),
+                'squad_value': data.get('away_value', 0),
+                'manager_games': data.get('away_manager_games', 5)
             }
             
             features = self.prepare_features(home_stats, away_stats)
@@ -83,36 +116,17 @@ class MatchPredictor:
         result_proba_gb = self.result_model_gb.predict_proba(features_scaled)[0]
         result_proba = (result_proba_rf * 0.4 + result_proba_gb * 0.6)  # GB weighted more
         
-        # Apply quality adjustment - if away team is significantly stronger, boost their chances
-        quality_diff = (away_stats.get('win_rate', 50) - home_stats.get('win_rate', 50)) / 100
-        goals_diff = away_stats['goals_avg'] - home_stats['goals_avg']
+        # Ensure probabilities are valid (no negatives, sum to 1)
+        result_proba = np.clip(result_proba, 0, 1)
+        result_proba = result_proba / result_proba.sum()
         
-        # If away team is much stronger (>20% better win rate or >0.8 more goals), adjust probabilities
-        if quality_diff > 0.2 or goals_diff > 0.8:
-            adjustment = min(0.25, quality_diff * 0.5 + goals_diff * 0.1)
-            result_proba[0] += adjustment  # Boost away win
-            result_proba[2] -= adjustment * 0.8  # Reduce home win
-            result_proba[1] -= adjustment * 0.2  # Slightly reduce draw
-            # Normalize
-            result_proba = result_proba / result_proba.sum()
-        
+        # Get winner
         result_pred = np.argmax(result_proba)
+        result_map = {0: 'away', 1: 'draw', 2: 'home'}
         
         # Predict goals with realistic constraints
         home_goals_raw = self.home_goals_model.predict(features_scaled)[0]
         away_goals_raw = self.away_goals_model.predict(features_scaled)[0]
-        
-        # Apply quality adjustment to goals - stronger team should score more
-        if quality_diff > 0.2 or goals_diff > 0.8:
-            # Boost away goals, reduce home goals
-            goal_adjustment = min(1.0, quality_diff * 1.5 + goals_diff * 0.5)
-            away_goals_raw += goal_adjustment
-            home_goals_raw -= goal_adjustment * 0.5
-        elif quality_diff < -0.2 or goals_diff < -0.8:
-            # Boost home goals, reduce away goals
-            goal_adjustment = min(1.0, abs(quality_diff) * 1.5 + abs(goals_diff) * 0.5)
-            home_goals_raw += goal_adjustment
-            away_goals_raw -= goal_adjustment * 0.5
         
         # Apply realistic constraints (max 5 goals per team, max 8 total)
         home_goals = max(0, min(5, int(round(home_goals_raw))))
@@ -124,8 +138,6 @@ class MatchPredictor:
             scale_factor = 7 / total_goals
             home_goals = max(0, int(round(home_goals * scale_factor)))
             away_goals = max(0, int(round(away_goals * scale_factor)))
-        
-        result_map = {0: 'away', 1: 'draw', 2: 'home'}
         
         return {
             'winner': result_map[result_pred],
