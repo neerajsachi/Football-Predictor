@@ -259,6 +259,61 @@ function App() {
                   </Card>
                 </div>
 
+                {/* Additional Match Stats */}
+                <div className="grid md:grid-cols-2 gap-6">
+                  <Card className="glass-strong" gradient>
+                    <CardBody>
+                      <h3 className="text-xl font-bold text-blue-600 mb-4">🏠 {homeTeam} - Match Stats</h3>
+                      <div className="space-y-2">
+                        <StatRow label="Shots" value={prediction.stats.home_shots} />
+                        <StatRow label="Shots on Target" value={prediction.stats.home_shots_on_target} />
+                        <StatRow label="Corners" value={prediction.stats.home_corners} />
+                      </div>
+                    </CardBody>
+                  </Card>
+                  <Card className="glass-strong" gradient>
+                    <CardBody>
+                      <h3 className="text-xl font-bold text-red-600 mb-4">✈️ {awayTeam} - Match Stats</h3>
+                      <div className="space-y-2">
+                        <StatRow label="Shots" value={prediction.stats.away_shots} />
+                        <StatRow label="Shots on Target" value={prediction.stats.away_shots_on_target} />
+                        <StatRow label="Corners" value={prediction.stats.away_corners} />
+                      </div>
+                    </CardBody>
+                  </Card>
+                </div>
+
+                {/* Likely Scorers */}
+                {prediction.likely_scorers && (prediction.likely_scorers.home.length > 0 || prediction.likely_scorers.away.length > 0) && (
+                  <Card className="glass-strong" gradient>
+                    <CardBody>
+                      <h3 className="text-2xl font-bold text-gray-800 mb-4">⚽ Likely Goal Scorers</h3>
+                      <div className="grid md:grid-cols-2 gap-6">
+                        <div>
+                          <h4 className="font-bold text-blue-600 mb-3">🏠 {homeTeam}</h4>
+                          <div className="space-y-2">
+                            {prediction.likely_scorers.home.map((player, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-3 shadow-sm">
+                                <span className="text-gray-800">{player}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-red-600 mb-3">✈️ {awayTeam}</h4>
+                          <div className="space-y-2">
+                            {prediction.likely_scorers.away.map((player, idx) => (
+                              <div key={idx} className="bg-white rounded-lg p-3 shadow-sm">
+                                <span className="text-gray-800">{player}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </CardBody>
+                  </Card>
+                )}
+
                 {/* H2H */}
                 {prediction.stats.h2h_results && prediction.stats.h2h_results.length > 0 && (
                   <Card className="glass-strong" gradient>
