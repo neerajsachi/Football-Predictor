@@ -26,10 +26,21 @@ function App() {
   const [clubFilteredClubs, setClubFilteredClubs] = useState([])
   const [showClubDropdown, setShowClubDropdown] = useState(false)
 
+  // League predictor state
+  const [leagues, setLeagues] = useState([])
+  const [selectedLeague, setSelectedLeague] = useState('')
+  const [leaguePrediction, setLeaguePrediction] = useState(null)
+  const [leagueLoading, setLeagueLoading] = useState(false)
+  const [leagueError, setLeagueError] = useState('')
+
   useEffect(() => {
     axios.get('http://localhost:8000/clubs')
       .then(res => setClubs(res.data.clubs))
       .catch(err => console.error('Failed to load clubs', err))
+    
+    axios.get('http://localhost:8000/leagues')
+      .then(res => setLeagues(res.data.leagues))
+      .catch(err => console.error('Failed to load leagues', err))
   }, [])
 
   const handleHomeTeamChange = (value) => {
@@ -157,6 +168,30 @@ function App() {
     }
   }
 
+  const handleLeaguePredict = async (e) => {
+    e.preventDefault()
+    if (!selectedLeague) return
+
+    setLeagueLoading(true)
+    setLeagueError('')
+    setLeaguePrediction(null)
+
+    try {
+      const response = await axios.post('http://localhost:8000/predict-league', {
+        league_id: selectedLeague
+      })
+      if (response.data.error) {
+        setLeagueError(response.data.error)
+      } else {
+        setLeaguePrediction(response.data)
+      }
+    } catch (err) {
+      setLeagueError('Failed to fetch league predictions.')
+    } finally {
+      setLeagueLoading(false)
+    }
+  }
+
   const getWinnerDisplay = (winner) => {
     if (winner === 'home') return displayHomeTeam
     if (winner === 'away') return displayAwayTeam
@@ -196,6 +231,16 @@ function App() {
             }`}
           >
             Transfer Predictor
+          </button>
+          <button
+            onClick={() => setActiveTab('league')}
+            className={`flex-1 py-4 px-6 rounded-xl font-semibold transition ${
+              activeTab === 'league'
+                ? 'bg-white text-blue-600 shadow-lg'
+                : 'bg-white/20 text-white hover:bg-white/30'
+            }`}
+          >
+            League Table
           </button>
         </div>
 
@@ -561,6 +606,117 @@ function App() {
                     ) : (
                       <p className="text-gray-500">No predicted incoming transfers</p>
                     )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* League Table Predictor Tab */}
+        {activeTab === 'league' && (
+          <div className="bg-white/95 backdrop-blur rounded-3xl shadow-2xl p-8 mb-8">
+            <form onSubmit={handleLeaguePredict} className="mb-8">
+              <div className="mb-4">
+                <label className="block text-sm font-semibold text-gray-700 mb-2">Select League</label>
+                <select
+                  value={selectedLeague}
+                  onChange={(e) => setSelectedLeague(e.target.value)}
+                  className="w-full px-6 py-4 text-lg border-2 border-gray-300 rounded-xl focus:outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition"
+                >
+                  <option value="">Choose a league...</option>
+                  {leagues.map((league) => (
+                    <option key={league.id} value={league.id}>
+                      {league.name} ({league.country})
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <button
+                type="submit"
+                disabled={leagueLoading || !selectedLeague}
+                className="w-full px-8 py-4 bg-gradient-to-r from-green-500 to-teal-500 text-white font-semibold rounded-xl hover:shadow-xl hover:scale-105 transition-all disabled:opacity-50 disabled:hover:scale-100"
+              >
+                {leagueLoading ? 'Predicting...' : 'Predict League Table'}
+              </button>
+            </form>
+
+            {leagueError && (
+              <div className="bg-red-100 border-l-4 border-red-500 text-red-700 px-6 py-4 rounded-lg mb-6 animate-fadeIn">
+                <p className="font-semibold">Error</p>
+                <p>{leagueError}</p>
+              </div>
+            )}
+
+            {leaguePrediction && (
+              <div className="space-y-6 animate-fadeIn">
+                <div className="bg-gradient-to-r from-green-500 to-teal-500 text-white rounded-2xl p-6 text-center">
+                  <h2 className="text-3xl font-bold">Predicted Final Table</h2>
+                  <p className="text-xl mt-2">{leaguePrediction.league_name}</p>
+                  <p className="text-sm mt-1 opacity-90">Season {leaguePrediction.season || '2025/26'} Projection</p>
+                  <p className="text-xs mt-2 opacity-75">⚠️ Based on historical data (up to Feb 2026)</p>
+                </div>
+
+                <div className="bg-white rounded-xl shadow-lg overflow-hidden">
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gradient-to-r from-gray-100 to-gray-200">
+                        <tr>
+                          <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">Pos</th>
+                          <th className="px-4 py-3 text-left text-sm font-bold text-gray-700">Team</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">P</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">W</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">D</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">L</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">GF</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">GA</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">GD</th>
+                          <th className="px-4 py-3 text-center text-sm font-bold text-gray-700">Pts</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {leaguePrediction.table.map((team, idx) => (
+                          <tr 
+                            key={idx} 
+                            className={`border-b hover:bg-gray-50 transition ${
+                              idx < 4 ? 'bg-blue-50' : 
+                              idx >= leaguePrediction.table.length - 3 ? 'bg-red-50' : ''
+                            }`}
+                          >
+                            <td className="px-4 py-3 text-center font-bold text-gray-700">{team.position}</td>
+                            <td className="px-4 py-3 font-semibold text-gray-800">{team.team_name}</td>
+                            <td className="px-4 py-3 text-center text-gray-600">{team.played}</td>
+                            <td className="px-4 py-3 text-center text-green-600 font-semibold">{team.won}</td>
+                            <td className="px-4 py-3 text-center text-gray-600">{team.drawn}</td>
+                            <td className="px-4 py-3 text-center text-red-600 font-semibold">{team.lost}</td>
+                            <td className="px-4 py-3 text-center text-gray-600">{team.goals_for}</td>
+                            <td className="px-4 py-3 text-center text-gray-600">{team.goals_against}</td>
+                            <td className={`px-4 py-3 text-center font-semibold ${
+                              team.goal_diff > 0 ? 'text-green-600' : 
+                              team.goal_diff < 0 ? 'text-red-600' : 'text-gray-600'
+                            }`}>
+                              {team.goal_diff > 0 ? '+' : ''}{team.goal_diff}
+                            </td>
+                            <td className="px-4 py-3 text-center font-bold text-blue-600 text-lg">{team.points}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                <div className="grid md:grid-cols-3 gap-4">
+                  <div className="bg-blue-50 rounded-xl p-4 text-center">
+                    <div className="text-sm text-gray-600 mb-1">🏆 Champions League</div>
+                    <div className="text-xs text-gray-500">Top 4 positions</div>
+                  </div>
+                  <div className="bg-yellow-50 rounded-xl p-4 text-center">
+                    <div className="text-sm text-gray-600 mb-1">⚽ Europa League</div>
+                    <div className="text-xs text-gray-500">5th-6th positions</div>
+                  </div>
+                  <div className="bg-red-50 rounded-xl p-4 text-center">
+                    <div className="text-sm text-gray-600 mb-1">⬇️ Relegation Zone</div>
+                    <div className="text-xs text-gray-500">Bottom 3 positions</div>
                   </div>
                 </div>
               </div>

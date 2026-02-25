@@ -5,6 +5,7 @@ import pandas as pd
 from src.models.match_model import MatchPredictor
 from src.utils.data_loader import get_team_stats
 from src.models.transfer_model import TransferPredictor
+from src.models.league_model import LeaguePredictor
 
 app = FastAPI()
 
@@ -19,12 +20,14 @@ app.add_middleware(
 # Load model and data
 predictor = MatchPredictor()
 transfer_predictor = TransferPredictor()
+league_predictor = LeaguePredictor()
 clubs_df = pd.read_csv('data/dataset/clubs.csv', encoding='utf-8')
 club_games_df = pd.read_csv('data/dataset/club_games.csv', encoding='utf-8')
 games_df = pd.read_csv('data/dataset/games.csv', encoding='utf-8')
 appearances_df = pd.read_csv('data/dataset/appearances.csv', encoding='utf-8')
 players_df = pd.read_csv('data/dataset/players.csv', encoding='utf-8')
 transfers_df = pd.read_csv('data/dataset/transfers.csv', encoding='utf-8')
+competitions_df = pd.read_csv('data/dataset/competitions.csv', encoding='utf-8')
 
 # Parse dates
 games_df['date'] = pd.to_datetime(games_df['date'])
@@ -38,12 +41,18 @@ player_map = dict(zip(players_df['player_id'], players_df['name']))
 if not predictor.load_model('models/match_model.pkl'):
     print("No trained model found. Run 'python train.py' first.")
 
+if not league_predictor.load_model('models/league_model.pkl'):
+    print("No league model found. Run 'python train_league.py' or using statistical fallback.")
+
 class MatchRequest(BaseModel):
     home_team: str
     away_team: str
 
 class TransferRequest(BaseModel):
     club_name: str
+
+class LeagueRequest(BaseModel):
+    league_id: str
 
 @app.get("/")
 def read_root():
@@ -54,6 +63,45 @@ def get_clubs():
     """Get list of all clubs for autocomplete"""
     clubs_list = sorted(list(club_map.values()))
     return {"clubs": clubs_list}
+
+@app.get("/leagues")
+def get_leagues():
+    """Get list of major leagues"""
+    major_leagues = competitions_df[
+        (competitions_df['type'] == 'domestic_league') & 
+        (competitions_df['sub_type'] == 'first_tier')
+    ].sort_values('name')
+    
+    leagues = [{
+        'id': row['competition_id'],
+        'name': row['name'].title(),
+        'country': row['country_name']
+    } for _, row in major_leagues.iterrows()]
+    
+    return {"leagues": leagues}
+
+@app.post("/predict-league")
+async def predict_league(request: LeagueRequest):
+    league_id = request.league_id
+    
+    # Get league info
+    league_info = competitions_df[competitions_df['competition_id'] == league_id]
+    if len(league_info) == 0:
+        return {"error": "League not found"}
+    
+    league_name = league_info.iloc[0]['name'].title()
+    
+    # Predict league table
+    table = league_predictor.predict_league_table(league_id, clubs_df, club_games_df, games_df)
+    
+    if not table:
+        return {"error": "Unable to generate predictions for this league"}
+    
+    return {
+        "league_name": league_name,
+        "season": "2025/26",
+        "table": table[:20]  # Limit to top 20 teams
+    }
 
 @app.post("/predict-match")
 async def predict_match(request: MatchRequest):
