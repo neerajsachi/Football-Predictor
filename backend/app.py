@@ -149,14 +149,19 @@ async def predict_match(request: MatchRequest):
         for rivalry in rivalries
     )
     
+    # Check if teams are in the same domestic league
+    home_league = home_club_data.get('domestic_competition_id')
+    away_league = away_club_data.get('domestic_competition_id')
+    same_league = home_league == away_league and pd.notna(home_league)
+    
     home_pos = home_stats.get('league_position', 10)
     away_pos = away_stats.get('league_position', 10)
     
     if is_rivalry:
         importance = 'Rivalry Match'
-    elif home_pos <= 4 and away_pos <= 4:
+    elif same_league and home_pos <= 4 and away_pos <= 4:
         importance = 'Title Race'
-    elif home_pos >= 17 or away_pos >= 17:
+    elif same_league and (home_pos >= 17 or away_pos >= 17):
         importance = 'Relegation Battle'
     else:
         importance = 'Regular Match'

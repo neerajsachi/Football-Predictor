@@ -97,21 +97,23 @@ class TransferPredictor:
         """Calculate probability of player leaving"""
         prob = 0.0
         
-        # Young high-value players are unlikely to leave (key players)
-        if age < 26 and market_value > 40000000:
-            return 0.1  # Only 10% chance - they're key young talents
+        # Elite players (€50M+) are very unlikely to leave unless old or contract issues
+        if market_value > 50000000 and age < 30:
+            prob = 0.05  # Only 5% chance for prime elite players
         
         # Age factor
-        if age > 32:
-            prob += 0.3
+        if age > 33:
+            prob += 0.4
+        elif age > 30:
+            prob += 0.2
         elif age < 23:
-            prob += 0.2  # Young players may move for development
+            prob += 0.15  # Young players may move for development
         
-        # Market value factor (high value = more interest)
-        if market_value > 50000000:
-            prob += 0.2  # Top players attract interest
-        elif market_value > 20000000:
-            prob += 0.15
+        # Market value factor
+        if market_value > 50000000 and age >= 30:
+            prob += 0.2  # Aging stars may move
+        elif market_value < 5000000:
+            prob += 0.3  # Low-value players more likely to move
         
         # Contract expiry factor (most important)
         if contract_expiry:
@@ -120,8 +122,6 @@ class TransferPredictor:
                 prob += 0.5
             elif years_left < 2:
                 prob += 0.3
-            elif years_left < 3:
-                prob += 0.1
         
         return min(prob, 0.9)
     
@@ -130,13 +130,86 @@ class TransferPredictor:
         transfers_in = []
         positions = ['Attack', 'Midfield', 'Defender', 'Goalkeeper']
         
+        # Define rival clubs (no transfers between these)
+        rivals = {
+            'Manchester United Football Club': ['Manchester City Football Club', 'Liverpool Football Club'],
+            'Manchester City Football Club': ['Manchester United Football Club', 'Liverpool Football Club', 'Tottenham Hotspur'],
+            'Liverpool Football Club': ['Manchester United Football Club', 'Manchester City Football Club', 'Everton Football Club'],
+            'Everton Football Club': ['Liverpool Football Club'],
+            'Arsenal Football Club': ['Tottenham Hotspur', 'Chelsea Football Club'],
+            'Tottenham Hotspur': ['Arsenal Football Club', 'Chelsea Football Club', 'Manchester City Football Club'],
+            'Chelsea Football Club': ['Arsenal Football Club', 'Tottenham Hotspur'],
+            'FC Barcelona': ['Real Madrid Club de Fútbol'],
+            'Real Madrid Club de Fútbol': ['FC Barcelona', 'Club Atlético de Madrid S.A.D.'],
+            'Club Atlético de Madrid S.A.D.': ['Real Madrid Club de Fútbol'],
+            'AC Milan': ['FC Internazionale Milano'],
+            'FC Internazionale Milano': ['AC Milan'],
+            'AS Roma': ['Società Sportiva Lazio S.p.A.'],
+            'Società Sportiva Lazio S.p.A.': ['AS Roma']
+        }
+        
+        # Define elite clubs manually since total_market_value is unreliable
+        elite_clubs = [
+            'Manchester City Football Club', 'Liverpool Football Club', 'Chelsea Football Club',
+            'Manchester United Football Club', 'Arsenal Football Club', 'Tottenham Hotspur',
+            'Real Madrid Club de Fútbol', 'FC Barcelona', 'FC Bayern München',
+            'Paris Saint-Germain Football Club', 'Juventus Football Club',
+            'FC Internazionale Milano', 'AC Milan', 'Club Atlético de Madrid S.A.D.'
+        ]
+        
+        top_clubs = [
+            'Newcastle United Football Club', 'Aston Villa Football Club', 'West Ham United Football Club',
+            'Borussia Dortmund', 'RasenBallsport Leipzig', 'Bayer 04 Leverkusen Fußball GmbH',
+            'Atlético de Madrid', 'Sevilla Fútbol Club S.A.D.', 'Villarreal Club de Fútbol S.A.D.',
+            'AS Roma', 'Società Sportiva Lazio S.p.A.', 'Sporting Clube de Portugal',
+            'Sport Lisboa e Benfica', 'Futebol Clube do Porto', 'AFC Ajax'
+        ]
+        
+        # Set realistic transfer budget based on club tier
+        if club_name in elite_clubs:
+            min_value, max_value = 30000000, 150000000
+        elif club_name in top_clubs:
+            min_value, max_value = 15000000, 70000000
+        else:
+            # Check stadium size as fallback
+            club_info = clubs_df[clubs_df['club_id'] == club_id]
+            if len(club_info) > 0:
+                stadium_size = club_info.iloc[0]['stadium_seats'] if pd.notna(club_info.iloc[0]['stadium_seats']) else 0
+                if stadium_size > 50000:
+                    min_value, max_value = 10000000, 50000000
+                elif stadium_size > 30000:
+                    min_value, max_value = 5000000, 30000000
+                else:
+                    min_value, max_value = 500000, 15000000
+            else:
+                min_value, max_value = 500000, 15000000
+        
+        print(f"Club: {club_name}, Transfer budget: €{min_value/1000000:.1f}M - €{max_value/1000000:.1f}M")
+        
         for position in positions:
             candidates = players_df[
                 (players_df['position'] == position) & 
                 (players_df['current_club_id'] != club_id) &
-                (players_df['market_value_in_eur'] > 5000000) &
-                (players_df['market_value_in_eur'] < 100000000)
-            ].nlargest(10, 'market_value_in_eur')
+                (players_df['market_value_in_eur'] >= min_value) &
+                (players_df['market_value_in_eur'] <= max_value)
+            ]
+            
+            # Filter out players from rival clubs
+            if club_name in rivals:
+                rival_club_ids = []
+                for rival_name in rivals[club_name]:
+                    rival_ids = clubs_df[clubs_df['name'] == rival_name]['club_id'].values
+                    if len(rival_ids) > 0:
+                        rival_club_ids.append(rival_ids[0])
+                
+                if len(rival_club_ids) > 0:
+                    candidates = candidates[~candidates['current_club_id'].isin(rival_club_ids)]
+            
+            print(f"Position {position}: {len(candidates)} candidates found")
+            
+            # Sample randomly from candidates to get variety
+            if len(candidates) > 10:
+                candidates = candidates.sample(n=10, random_state=np.random.randint(0, 10000))
             
             for _, player in candidates.head(2).iterrows():
                 age = 2025 - pd.to_datetime(player['date_of_birth']).year if pd.notna(player['date_of_birth']) else 25
@@ -172,11 +245,12 @@ class TransferPredictor:
         # Define rival clubs (no transfers between these)
         rivals = {
             'Manchester United Football Club': ['Manchester City Football Club', 'Liverpool Football Club'],
-            'Manchester City Football Club': ['Manchester United Football Club', 'Liverpool Football Club'],
+            'Manchester City Football Club': ['Manchester United Football Club', 'Liverpool Football Club', 'Tottenham Hotspur'],
             'Liverpool Football Club': ['Manchester United Football Club', 'Manchester City Football Club', 'Everton Football Club'],
             'Everton Football Club': ['Liverpool Football Club'],
-            'Arsenal Football Club': ['Tottenham Hotspur'],
-            'Tottenham Hotspur': ['Arsenal Football Club'],
+            'Arsenal Football Club': ['Tottenham Hotspur', 'Chelsea Football Club'],
+            'Tottenham Hotspur': ['Arsenal Football Club', 'Chelsea Football Club', 'Manchester City Football Club'],
+            'Chelsea Football Club': ['Arsenal Football Club', 'Tottenham Hotspur'],
             'FC Barcelona': ['Real Madrid Club de Fútbol'],
             'Real Madrid Club de Fútbol': ['FC Barcelona', 'Club Atlético de Madrid S.A.D.'],
             'Club Atlético de Madrid S.A.D.': ['Real Madrid Club de Fútbol'],
