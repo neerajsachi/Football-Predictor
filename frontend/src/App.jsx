@@ -4,6 +4,8 @@ import { useApi } from './hooks/useApi'
 import { showToast } from './utils/toast'
 import axios from 'axios'
 
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
+
 function App() {
   const [activeTab, setActiveTab] = useState('match')
   const [clubs, setClubs] = useState([])
@@ -20,7 +22,7 @@ function App() {
   const [transferLoading, setTransferLoading] = useState(false)
 
   useEffect(() => {
-    axios.get('http://localhost:8000/clubs')
+    axios.get(`${API_URL}/clubs`)
       .then(res => setClubs(res.data.clubs))
       .catch(err => console.error('Failed to load clubs', err))
   }, [])
@@ -41,7 +43,7 @@ function App() {
     setPrediction(null)
 
     try {
-      const response = await axios.post('http://localhost:8000/predict-match', {
+      const response = await axios.post(`${API_URL}/predict-match`, {
         home_team: homeTeam,
         away_team: awayTeam
       })
@@ -69,7 +71,7 @@ function App() {
     setTransferPrediction(null)
 
     try {
-      const response = await axios.post('http://localhost:8000/predict-transfers', {
+      const response = await axios.post(`${API_URL}/predict-transfers`, {
         club_name: clubName
       })
       setTransferPrediction(response.data)
